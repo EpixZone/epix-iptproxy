@@ -9,8 +9,10 @@ This repo builds a tiny C library that runs the Snowflake **client** in-process
 arti client then dials its bridge through that port as an unmanaged pluggable
 transport.
 
-It is a thin cgo wrapper around [tladesignz/IPtProxy](https://github.com/tladesignz/IPtProxy)'s
-`Controller`, exposing three C functions:
+It is a thin cgo wrapper around the Tor Project's
+[Snowflake client library](https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake)
+(pure Go, no subprocess): it accepts SOCKS connections and pipes each through a
+Snowflake transport connection. Exposes three C functions:
 
 ```c
 int  EpixStartSnowflake(char *stateDir, char *ice, char *broker, char *fronts, char *ampcache);
@@ -53,7 +55,7 @@ go mod tidy
 CGO_ENABLED=1 go build -buildmode=c-shared -o epix_snowflake.dll .   # or .so
 ```
 
-Pins: IPtProxy 5.5.1 (Snowflake 2.14.1). Bump `go.mod` and re-tag to update.
+Pins: Snowflake 2.14.1. Bump `go.mod` and re-tag to update.
 
 ## Consuming from EpixNet
 
