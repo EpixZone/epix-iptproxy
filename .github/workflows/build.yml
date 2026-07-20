@@ -67,8 +67,10 @@ jobs:
           GOOS: android
           GOARCH: arm64
         run: |
+          # -checklinkname=0: a transitive snowflake dep (wlynxg/anet) uses a
+          # go:linkname to net.zoneCache that Go 1.23+ rejects by default.
           CC="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
-            go build -buildmode=c-shared -o "${{ env.OUT }}-aarch64-linux-android.so" .
+            go build -buildmode=c-shared -ldflags=-checklinkname=0 -o "${{ env.OUT }}-aarch64-linux-android.so" .
       - uses: actions/upload-artifact@v4
         with:
           name: aarch64-linux-android
