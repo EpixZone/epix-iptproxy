@@ -1,0 +1,9 @@
+# Build outputs
+*.dll
+*.so
+*.dylib
+*.a
+*.h
+!*.go
+clangwrap-*.sh
+dist/

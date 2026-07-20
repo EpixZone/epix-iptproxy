@@ -1,0 +1,144 @@
+name: build
+
+# Build the Snowflake wrapper for every target EpixNet ships, and on a version
+# tag publish them as a release. EpixNet's iptproxy-sys crate downloads the
+# assets by their Rust target-triple names.
+on:
+  push:
+    tags: ["v*"]
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GO_VERSION: "1.25.0"
+  # Bump when the Snowflake rendezvous or IPtProxy version changes.
+  OUT: epix_snowflake
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      # Go cgo on Windows needs a gcc; the runner ships mingw-w64.
+      - run: echo "C:\ProgramData\mingw64\mingw64\bin" >> $env:GITHUB_PATH
+      - run: go mod tidy
+      - name: build c-shared (dll)
+        run: |
+          $env:CGO_ENABLED = "1"
+          go build -buildmode=c-shared -o "${{ env.OUT }}-x86_64-pc-windows-msvc.dll" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-pc-windows-msvc
+          path: |
+            ${{ env.OUT }}-x86_64-pc-windows-msvc.dll
+            ${{ env.OUT }}.h
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - run: go mod tidy
+      - name: build c-archive (a)
+        env: { CGO_ENABLED: "1" }
+        run: go build -buildmode=c-archive -o "${{ env.OUT }}-x86_64-unknown-linux-gnu.a" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-unknown-linux-gnu
+          path: ${{ env.OUT }}-x86_64-unknown-linux-gnu.a
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with: { ndk-version: r26d }
+      - run: go mod tidy
+      - name: build c-shared (so, arm64)
+        env:
+          CGO_ENABLED: "1"
+          GOOS: android
+          GOARCH: arm64
+        run: |
+          CC="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
+            go build -buildmode=c-shared -o "${{ env.OUT }}-aarch64-linux-android.so" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aarch64-linux-android
+          path: ${{ env.OUT }}-aarch64-linux-android.so
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - run: go mod tidy
+      - name: build c-archive (per arch)
+        env: { CGO_ENABLED: "1" }
+        run: |
+          GOARCH=arm64 go build -buildmode=c-archive -o "${{ env.OUT }}-aarch64-apple-darwin.a" .
+          GOARCH=amd64 go build -buildmode=c-archive -o "${{ env.OUT }}-x86_64-apple-darwin.a" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-darwin
+          path: |
+            ${{ env.OUT }}-aarch64-apple-darwin.a
+            ${{ env.OUT }}-x86_64-apple-darwin.a
+            ${{ env.OUT }}.h
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "${{ env.GO_VERSION }}" }
+      - run: go mod tidy
+      # Go's ios build needs a CC wrapper that injects the SDK sysroot + arch.
+      - name: write clang wrappers
+        run: |
+          cat > clangwrap-ios.sh <<'EOF'
+          #!/bin/sh
+          exec $(xcrun --sdk iphoneos --find clang) -arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -mios-version-min=13.0 "$@"
+          EOF
+          cat > clangwrap-sim.sh <<'EOF'
+          #!/bin/sh
+          exec $(xcrun --sdk iphonesimulator --find clang) -arch arm64 -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -mios-simulator-version-min=13.0 "$@"
+          EOF
+          chmod +x clangwrap-ios.sh clangwrap-sim.sh
+      - name: build c-archive (device + simulator)
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ios
+          GOARCH: arm64
+        run: |
+          CC="$PWD/clangwrap-ios.sh" go build -buildmode=c-archive -o "${{ env.OUT }}-aarch64-apple-ios.a" .
+          CC="$PWD/clangwrap-sim.sh" go build -buildmode=c-archive -tags ios -o "${{ env.OUT }}-aarch64-apple-ios-sim.a" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-ios
+          path: |
+            ${{ env.OUT }}-aarch64-apple-ios.a
+            ${{ env.OUT }}-aarch64-apple-ios-sim.a
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux, android, macos, ios]
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: flatten
+        run: find dist -type f -exec mv {} dist/ \; || true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: false
