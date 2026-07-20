@@ -35,12 +35,15 @@ var (
 
 // EpixStartSnowflake starts the in-process Snowflake client and its local SOCKS
 // listener. `stateDir` is accepted for API stability but unused (the client
-// library keeps no on-disk state). The other arguments are the Snowflake
-// rendezvous parameters (comma-separated where plural). Returns 0 on success, a
+// library keeps no on-disk state). The other string arguments are the Snowflake
+// rendezvous parameters (comma-separated where plural). `max` is the number of
+// simultaneous Snowflake proxies to collect and load-balance across; a single
+// proxy is often slow, so more proxies improve throughput and resilience. A
+// value below 1 falls back to a sensible default. Returns 0 on success, a
 // negative code on failure. Idempotent while running.
 //
 //export EpixStartSnowflake
-func EpixStartSnowflake(stateDir, ice, broker, fronts, ampcache *C.char) C.int {
+func EpixStartSnowflake(stateDir, ice, broker, fronts, ampcache *C.char, max C.int) C.int {
 	_ = stateDir
 	mu.Lock()
 	defer mu.Unlock()
@@ -52,7 +55,7 @@ func EpixStartSnowflake(stateDir, ice, broker, fronts, ampcache *C.char) C.int {
 		AmpCacheURL:  C.GoString(ampcache),
 		FrontDomains: splitComma(C.GoString(fronts)),
 		ICEAddresses: splitComma(C.GoString(ice)),
-		Max:          1,
+		Max:          clampMax(int(max)),
 	})
 	if err != nil {
 		return -1
@@ -121,6 +124,20 @@ func handle(conn *pt.SocksConn, transport *sf.Transport) {
 	go func() { _, _ = io.Copy(remote, conn); done <- struct{}{} }()
 	go func() { _, _ = io.Copy(conn, remote); done <- struct{}{} }()
 	<-done
+}
+
+// clampMax bounds the requested simultaneous-proxy count. Below 1 it defaults
+// to 3 (Tor's own client example uses -max 3); it caps at 8 so a bad config
+// value cannot ask the broker for an unreasonable number of proxies.
+func clampMax(n int) int {
+	switch {
+	case n < 1:
+		return 3
+	case n > 8:
+		return 8
+	default:
+		return n
+	}
 }
 
 func splitComma(s string) []string {
