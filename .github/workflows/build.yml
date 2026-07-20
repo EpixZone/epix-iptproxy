@@ -19,8 +19,8 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with: { go-version: "${{ env.GO_VERSION }}" }
       # Go cgo on Windows needs a gcc; the runner ships mingw-w64.
       - run: echo "C:\ProgramData\mingw64\mingw64\bin" >> $env:GITHUB_PATH
@@ -29,7 +29,7 @@ jobs:
         run: |
           $env:CGO_ENABLED = "1"
           go build -buildmode=c-shared -o "${{ env.OUT }}-x86_64-pc-windows-msvc.dll" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: x86_64-pc-windows-msvc
           path: |
@@ -39,14 +39,14 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with: { go-version: "${{ env.GO_VERSION }}" }
       - run: go mod tidy
       - name: build c-archive (a)
         env: { CGO_ENABLED: "1" }
         run: go build -buildmode=c-archive -o "${{ env.OUT }}-x86_64-unknown-linux-gnu.a" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: x86_64-unknown-linux-gnu
           path: ${{ env.OUT }}-x86_64-unknown-linux-gnu.a
@@ -54,8 +54,8 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with: { go-version: "${{ env.GO_VERSION }}" }
       - uses: nttld/setup-ndk@v1
         id: ndk
@@ -71,7 +71,7 @@ jobs:
           # go:linkname to net.zoneCache that Go 1.23+ rejects by default.
           CC="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
             go build -buildmode=c-shared -ldflags=-checklinkname=0 -o "${{ env.OUT }}-aarch64-linux-android.so" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: aarch64-linux-android
           path: ${{ env.OUT }}-aarch64-linux-android.so
@@ -79,8 +79,8 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with: { go-version: "${{ env.GO_VERSION }}" }
       - run: go mod tidy
       - name: build c-archive (per arch)
@@ -88,7 +88,7 @@ jobs:
         run: |
           GOARCH=arm64 go build -buildmode=c-archive -o "${{ env.OUT }}-aarch64-apple-darwin.a" .
           GOARCH=amd64 go build -buildmode=c-archive -o "${{ env.OUT }}-x86_64-apple-darwin.a" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: apple-darwin
           path: |
@@ -99,8 +99,8 @@ jobs:
   ios:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with: { go-version: "${{ env.GO_VERSION }}" }
       - run: go mod tidy
       # Go's ios build needs a CC wrapper that injects the SDK sysroot + arch.
@@ -123,7 +123,7 @@ jobs:
         run: |
           CC="$PWD/clangwrap-ios.sh" go build -buildmode=c-archive -o "${{ env.OUT }}-aarch64-apple-ios.a" .
           CC="$PWD/clangwrap-sim.sh" go build -buildmode=c-archive -tags ios -o "${{ env.OUT }}-aarch64-apple-ios-sim.a" .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: apple-ios
           path: |
@@ -136,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with: { path: dist }
       - name: flatten
         run: find dist -type f -exec mv {} dist/ \; || true
