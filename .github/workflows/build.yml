@@ -69,8 +69,11 @@ jobs:
         run: |
           # -checklinkname=0: a transitive snowflake dep (wlynxg/anet) uses a
           # go:linkname to net.zoneCache that Go 1.23+ rejects by default.
+          # max-page-size=16384: Android 15+ devices can run with 16 KB memory
+          # pages; without this the .so's LOAD segments are 4 KB aligned and
+          # the app gets flagged (and later blocked) on 16 KB devices.
           CC="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang" \
-            go build -buildmode=c-shared -ldflags=-checklinkname=0 -o "${{ env.OUT }}-aarch64-linux-android.so" .
+            go build -buildmode=c-shared "-ldflags=-checklinkname=0 -extldflags=-Wl,-z,max-page-size=16384" -o "${{ env.OUT }}-aarch64-linux-android.so" .
       - uses: actions/upload-artifact@v6
         with:
           name: aarch64-linux-android
